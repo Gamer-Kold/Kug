@@ -1,0 +1,3 @@
+[submodule "Kug_Lib/xmpp-rs"]
+	path = Kug_Lib/xmpp-rs
+	url = https://gitlab.com/xmpp-rs/xmpp-rs/
