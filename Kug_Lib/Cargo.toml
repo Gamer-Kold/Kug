@@ -7,6 +7,12 @@ edition = "2021"
 
 [dependencies]
 gdnative="0.11"
+xmpp={path = "./xmpp-rs/xmpp/"}
+
+
+[patch.crates-io]
+tokio-xmpp={path="./xmpp-rs/tokio-xmpp/"}
+
 
 [lib]
 crate-type=['cdylib']
