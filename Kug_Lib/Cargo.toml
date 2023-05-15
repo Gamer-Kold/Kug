@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 gdnative="0.11"
+serde = { version = "1.0.0", features = ["derive"] }
+serde_yaml = "0.9.0"
 xmpp={path = "./xmpp-rs/xmpp/"}
 
 

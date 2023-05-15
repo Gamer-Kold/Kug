@@ -1,5 +1,10 @@
-use gdnative::{api::Button, api::LineEdit, prelude::*};
+use gdnative::{
+    api::{Button, File, LineEdit},
+    prelude::*,
+};
+use serde_yaml::{self};
 
+use crate::classes::user::User;
 #[derive(NativeClass)]
 #[inherit(Button)]
 pub struct LoginButton {
@@ -42,12 +47,27 @@ impl LoginButton {
     }
 
     #[method]
-    fn _pressed(&self, #[base] _base: &Button) {
+    fn _pressed(&self, #[base] base: &Button) {
         let username = unsafe { self.username_field.unwrap().assume_safe().text() };
         let password = unsafe { self.password_field.unwrap().assume_safe().text() };
 
         godot_print!("Button pressed from Rust!");
         godot_print!("Username text: {}", username);
         godot_print!("Password text: {}", password);
+
+        let user_object = User::new(username.to_string(), password.to_string());
+        let yaml_str = serde_yaml::to_string(&user_object).unwrap();
+
+        let user_file = File::new();
+        user_file
+            .open("user://user.yaml", File::WRITE)
+            .expect("user://user.yaml must exist");
+        user_file.store_string(yaml_str);
+        user_file.flush();
+        user_file.close();
+
+        unsafe {
+            base.get_tree().unwrap().assume_safe().change_scene("res://Node2D.tscn").unwrap();
+        }
     }
 }
