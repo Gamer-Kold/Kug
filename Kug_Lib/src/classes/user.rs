@@ -10,4 +10,11 @@ impl User {
     pub fn new(username: String, password: String) -> Self {
         Self { username, password }
     }
+
+    pub fn default() -> Self {
+        Self { 
+            username: String::from("???"),
+            password: String::from("???"),
+        }
+    }
 }

@@ -2,7 +2,7 @@ use gdnative::{
     api::{Button, File, LineEdit},
     prelude::*,
 };
-use serde_yaml::{self};
+use serde_json::{self};
 
 use crate::classes::user::User;
 #[derive(NativeClass)]
@@ -56,18 +56,18 @@ impl LoginButton {
         godot_print!("Password text: {}", password);
 
         let user_object = User::new(username.to_string(), password.to_string());
-        let yaml_str = serde_yaml::to_string(&user_object).unwrap();
+        let yaml_str = serde_json::to_string(&user_object).unwrap();
 
         let user_file = File::new();
         user_file
-            .open("user://user.yaml", File::WRITE)
-            .expect("user://user.yaml must exist");
+            .open("user://user.json", File::WRITE)
+            .expect("user://user.json must exist");
         user_file.store_string(yaml_str);
         user_file.flush();
         user_file.close();
 
         unsafe {
-            base.get_tree().unwrap().assume_safe().change_scene("res://Node2D.tscn").unwrap();
+            base.get_tree().unwrap().assume_safe().change_scene("res://Main.tscn").unwrap();
         }
     }
 }

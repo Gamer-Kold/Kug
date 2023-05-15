@@ -2,29 +2,12 @@ use gdnative::prelude::*;
 
 pub mod classes;
 mod login;
-
-#[derive(NativeClass)]
-#[inherit(Node)]
-pub struct HelloWorld;
-
-impl HelloWorld {
-    fn new(_base: &Node) -> Self {
-        HelloWorld
-    }
-}
-
-#[methods]
-impl HelloWorld {
-    #[method]
-    fn _ready(&self, #[base] base: &Node) {
-        godot_print!("Hello world from node {}!", base.to_string());
-    }
-}
+mod app;
 
 fn init(handle: InitHandle) {
-    handle.add_class::<HelloWorld>();
     handle.add_class::<login::login_button::LoginButton>();
     handle.add_class::<login::login_check::LoginCheck>();
+    handle.add_class::<app::client::Client>();
 }
 
 godot_init!(init);
