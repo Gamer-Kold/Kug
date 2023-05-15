@@ -1,5 +1,7 @@
 use gdnative::prelude::*;
 
+mod login;
+
 #[derive(NativeClass)]
 #[inherit(Node)]
 pub struct HelloWorld;
@@ -20,6 +22,7 @@ impl HelloWorld {
 
 fn init(handle : InitHandle){
     handle.add_class::<HelloWorld>();
+    handle.add_class::<login::login_button::LoginButton>();
 }
 
 godot_init!(init);

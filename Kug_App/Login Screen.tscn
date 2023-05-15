@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=2]
+[gd_scene load_steps=3 format=2]
 
 [ext_resource path="res://kug_dark_theme.tres" type="Theme" id=1]
+[ext_resource path="res://Button.gdns" type="Script" id=2]
 
 [node name="Login Screen" type="Control"]
 anchor_right = 1.0
@@ -29,20 +30,22 @@ margin_bottom = 14.0
 text = "Please Log In"
 align = 1
 
-[node name="LineEdit" type="LineEdit" parent="PanelContainer/CenterContainer/VBoxContainer"]
+[node name="UsernameField" type="LineEdit" parent="PanelContainer/CenterContainer/VBoxContainer"]
 margin_top = 18.0
 margin_right = 150.0
 margin_bottom = 42.0
 placeholder_text = "JID"
 
-[node name="LineEdit2" type="LineEdit" parent="PanelContainer/CenterContainer/VBoxContainer"]
+[node name="PasswordField" type="LineEdit" parent="PanelContainer/CenterContainer/VBoxContainer"]
 margin_top = 46.0
 margin_right = 150.0
 margin_bottom = 70.0
+secret = true
 placeholder_text = "Password"
 
-[node name="Button" type="Button" parent="PanelContainer/CenterContainer/VBoxContainer"]
+[node name="LoginButton" type="Button" parent="PanelContainer/CenterContainer/VBoxContainer"]
 margin_top = 74.0
 margin_right = 150.0
 margin_bottom = 94.0
 text = "Log In"
+script = ExtResource( 2 )
