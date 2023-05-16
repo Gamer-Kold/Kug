@@ -3,4 +3,6 @@
 [ext_resource path="res://Client.gdns" type="Script" id=1]
 
 [node name="Main" type="Control"]
+
+[node name="Client" type="Node" parent="."]
 script = ExtResource( 1 )
