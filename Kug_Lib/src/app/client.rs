@@ -2,8 +2,6 @@
 
 use gdnative::{prelude::*, api::File};
 use std::{thread, sync::mpsc::{Receiver, Sender, self}};
-use xmpp::{ClientBuilder, ClientFeature, ClientType, Event};
-use xmpp_parsers::{message::MessageType, Jid};
 use serde_json::{self};
 
 use crate::classes::user::User;
@@ -39,29 +37,26 @@ impl Client {
             user: User::default(),
         }
     }
-
     fn start_thread(&mut self, channels: (Sender<CommunicationPacket>, Receiver<CommunicationPacket>)) {
         self.thread = Some(thread::spawn(move || {
-            godot_print!("Hello, world!");
-
             if let Err(err) = channels.0.send(CommunicationPacket::GetUserInfo) {
                 godot_print!("Thread sender channel threw error: {}", err);
             };
 
-            // loop {
-            //     channels.1.recv();
-            // }
-            
-            // let mut client = ClientBuilder::new(jid, password)
-            //     .set_client(ClientType::Bot, "xmpp-rs")
-            //     .set_website("https://gitlab.com/xmpp-rs/xmpp-rs")
-            //     .set_default_nick("bot")
-            //     .enable_feature(ClientFeature::Avatars)
-            //     .enable_feature(ClientFeature::ContactList)
-            //     .enable_feature(ClientFeature::JoinRooms)
-            //     .build()
-            //     .unwrap();
+            let user: User;
 
+            loop {
+                godot_print!("Trying to get user packet.");
+                if let Ok(packet) = channels.1.recv() {
+                    if let CommunicationPacket::SendUserInfo(p_user) = packet {
+                        godot_print!("Got user packet!");
+                        user = p_user;
+                        break;
+                    }
+                };
+            }
+
+            godot_print!("Jid is {}", user.username);
         }));
     }
 }
@@ -84,8 +79,6 @@ impl Client {
 
         self.sender = Some(channel_to_thread.0);
         self.receiver = Some(channel_from_thread.1);
-
-        godot_print!("Client loaded");
     }
 
     #[method]
@@ -93,8 +86,9 @@ impl Client {
         if let Ok(packet) = self.receiver.as_ref().unwrap().recv() {
             match packet {
                 CommunicationPacket::GetUserInfo => {
-                    
-                }
+                    self.sender.as_ref().unwrap().send(CommunicationPacket::SendUserInfo(self.user.clone())).unwrap();
+                },
+                _ => godot_print!("Got unknown packet: {:?}", packet),
             }
         }
     }
