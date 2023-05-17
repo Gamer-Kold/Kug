@@ -9,13 +9,6 @@ edition = "2021"
 gdnative="0.11"
 serde = { version = "1.0.0", features = ["derive"] }
 serde_json = "1.0.96"
-xmpp={path = "./xmpp-rs/xmpp/"}
-xmpp-parsers = {path="./xmpp-rs/parsers"}
-
-
-[patch.crates-io]
-tokio-xmpp={path="./xmpp-rs/tokio-xmpp/"}
-
 
 [lib]
 crate-type=['cdylib']
