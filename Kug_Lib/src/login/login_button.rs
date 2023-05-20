@@ -2,9 +2,11 @@ use gdnative::{
     api::{Button, File, LineEdit},
     prelude::*,
 };
+
+use xmpp::user::User;
 use serde_json::{self};
 
-use crate::classes::user::User;
+// use crate::classes::user::User;
 #[derive(NativeClass)]
 #[inherit(Button)]
 pub struct LoginButton {
@@ -55,7 +57,7 @@ impl LoginButton {
         godot_print!("Username text: {}", username);
         godot_print!("Password text: {}", password);
 
-        let user_object = User::new(username.to_string(), password.to_string());
+        let user_object = User::new(&username.to_string(), &password.to_string());
         let json_str = serde_json::to_string(&user_object).unwrap();
 
         let user_file = File::new();

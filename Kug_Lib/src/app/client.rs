@@ -4,7 +4,7 @@ use gdnative::{prelude::*, api::File};
 use std::{thread, sync::mpsc::{Receiver, Sender, self}};
 use serde_json::{self};
 
-use crate::classes::user::User;
+use xmpp::user::User;
 
 #[derive(Debug)]
 enum CommunicationPacket {
@@ -34,7 +34,7 @@ impl Client {
             thread: None,
             sender: None,
             receiver: None,
-            user: User::default(),
+            user: User::new("???", "???"),
         }
     }
     fn start_thread(&mut self, channels: (Sender<CommunicationPacket>, Receiver<CommunicationPacket>)) {
