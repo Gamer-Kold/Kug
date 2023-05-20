@@ -56,13 +56,13 @@ impl LoginButton {
         godot_print!("Password text: {}", password);
 
         let user_object = User::new(username.to_string(), password.to_string());
-        let yaml_str = serde_json::to_string(&user_object).unwrap();
+        let json_str = serde_json::to_string(&user_object).unwrap();
 
         let user_file = File::new();
         user_file
             .open("user://user.json", File::WRITE)
             .expect("user://user.json must exist");
-        user_file.store_string(yaml_str);
+        user_file.store_string(json_str);
         user_file.flush();
         user_file.close();
 
