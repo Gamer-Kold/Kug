@@ -1,40 +1,44 @@
 use crate::user::User;
-use sasl::common::{Credentials, ChannelBinding};
-use sasl::client::Mechanism;
+use crate::xmpp_stream::XMPPStream;
+use minidom::Node;
 use sasl::client::mechanisms::Plain;
+use sasl::client::Mechanism;
+use sasl::common::{ChannelBinding, Credentials};
+// use core::slice::SlicePattern;
+use crate::packet::Packet;
+use crate::packet::PacketExporter;
+use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::io::BufRead;
+use std::io::BufReader;
 use std::io::BufWriter;
-use std::str;
 use std::io::Write;
 use std::net::IpAddr;
 use std::net::TcpStream;
-use trust_dns_resolver::Resolver;
+use std::str;
 use trust_dns_resolver::config::*;
-use crate::packet::Packet;
+use trust_dns_resolver::Resolver;
 use xmpp_parsers::sasl::{Auth, Challenge, Failure, Mechanism as XMPPMechanism, Response, Success};
-use base64::{Engine as _, engine::general_purpose};
+use xmpp_parsers::Element;
 
 const PORT: i32 = 5222;
-const STREAM_VERSION: &str = "1.0";
-const XML_NAMESPACE: &str = "jabber:client";
-const XML_NAMESPACE_STREAM: &str = "http://etherx.jabber.org/streams";
+const RESOURCE_BIND: &str = "Kug";
 
 pub struct Client {
-    user: User
+    user: User,
+    stream: Option<XMPPStream>,
 }
 
 impl Client {
     pub fn new(user: User) -> Self {
-        Self {
-            user
-        }
+        Self { user, stream: None }
     }
 
     fn get_host_ip(&self) -> String {
         let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default()).unwrap();
-        let response = resolver.lookup_ip(&self.user.username.clone().domain()).unwrap();
+        let response = resolver
+            .lookup_ip(&self.user.username.clone().domain())
+            .unwrap();
 
         let address = response.iter().next().expect("no addresses returned!");
 
@@ -44,37 +48,38 @@ impl Client {
         }
     }
 
-    pub fn connect(&self) {
+    fn generate_resource_bind(&self) -> Element {
+        let resource = Element::builder("resource", "")
+            .append(RESOURCE_BIND)
+            .build();
+
+        let bind = Element::builder("bind", "urn:ietf:params:xml:ns:xmpp-bind")
+            .append(resource)
+            .build();
+
+        let root = Element::builder("iq", "jabber:client")
+            .attr("type", "set")
+            .attr("id", "123") // TODO: ID's are required for 'iq' stanzas. Generate a random, unique id.
+            .append(bind)
+            .build();
+
+        root
+
+        // let bind_iq = "<iq xmlns='jabber:client' type='set' id='46725cf8-cbf8-4acf-aeba-dd2c678cc932'><bind xmlns=''><resource>Kug</resource></bind></iq>";
+        // println!("[CLI] >>> {}", bind_iq);
+    }
+
+    pub fn connect(&mut self) {
         let host_addr = self.get_host_ip();
         println!("host ip is {}", host_addr);
-        let stream = TcpStream::connect(format!("{}:{}", host_addr, PORT)).unwrap();
-        let mut reader = BufReader::new(&stream);
-        let mut writer = BufWriter::new(&stream);
+        let tcp_stream = TcpStream::connect(format!("{}:{}", host_addr, PORT)).unwrap();
+        let stream = XMPPStream::new(tcp_stream, self.user.clone());
 
-        let stream_start_packet = Packet::Start(HashMap::from([
-            (String::from("from"), self.user.username.to_string()),
-            (String::from("to"), self.user.username.clone().domain()),
-            (String::from("version"), String::from(STREAM_VERSION)),
-            (String::from("xmlns"), String::from(XML_NAMESPACE)),
-            (String::from("xmlns:stream"), String::from(XML_NAMESPACE_STREAM)),
-        ]));
+        stream.start_stream();
 
-        let start_stream = crate::packet::PacketExporter::export(stream_start_packet).unwrap();
-
-        println!("[CLI] >>> {start_stream}");
-
-        writer.write(start_stream.as_bytes()).unwrap();
-        writer.flush().unwrap();
-
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        reader.consume(received.len());
-        println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
-
-        // TODO: Add support for STARSSL
+        // TODO: Read features and apply any that is required or should be enabled (example: starttls)
         // Test server doesn't require any features, so let's just move on. Just need something working locally.
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        reader.consume(received.len());
-        println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
+        stream.read();
 
         let credentials = Credentials::default()
             .with_username(self.user.username.clone().node().unwrap())
@@ -85,43 +90,73 @@ impl Client {
         let initial = sasl_cred.initial();
         let mut user_payload: Vec<u8> = vec![0; initial.len() * 4 / 3 + 4];
 
-        let written = general_purpose::STANDARD.encode_slice(initial.as_slice(), &mut user_payload).unwrap();
+        let written = general_purpose::STANDARD
+            .encode_slice(initial.as_slice(), &mut user_payload)
+            .unwrap();
         user_payload.truncate(written);
 
-        writer.write(b"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>").unwrap();
-        writer.write(&user_payload).unwrap();
-        writer.write(b"</auth>").unwrap();
-        println!("[CLI] >>> {}", str::from_utf8(writer.buffer()).unwrap());
-        writer.flush().unwrap();
+        // TODO: Read mechanisms and connect via the best mechanism
+        // We are just using PLAIN to see if our code works.
 
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        reader.consume(received.len());
-        println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
+        let auth_packet = Packet::Stanza(
+            Element::builder("auth", "urn:ietf:params:xml:ns:xmpp-sasl")
+                .attr("mechanism", "PLAIN")
+                .append(Node::Text(String::from(
+                    str::from_utf8(user_payload.as_slice()).unwrap(),
+                )))
+                .build(),
+        );
 
-        writer.write(start_stream.as_bytes()).unwrap();
-        writer.flush().unwrap();
-        println!("[CLI] >>> {start_stream}");
+        stream.send(auth_packet);
 
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        reader.consume(received.len());
-        println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
+        // TODO: When we use other authentication methods, we may run into a challenge (or multiple!)
+        // Loop until we read a success stanza.
+        // PLAIN shouldn't challenge though (when I tested)
 
-        writer.write(b"<presence><show/></presence>").unwrap();
-        println!("[CLI] >>> {}", str::from_utf8(writer.buffer()).unwrap());
-        writer.flush().unwrap();
+        stream.read();
 
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        reader.consume(received.len());
-        println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
+        // Start a new stream after we authenticate (RFC shows this in an example)
+        // It should send a stream header, and features as a child in one stanza.
 
-        // End stream
-        let end_stream = crate::packet::PacketExporter::export(Packet::End).unwrap();
-        writer.write(end_stream.as_bytes()).unwrap();
-        writer.flush().unwrap();
-        println!("[CLI] >>> {}", end_stream);
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        reader.consume(received.len());
-        println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
+        stream.start_stream();
 
+        let bind_iq = Packet::Stanza(self.generate_resource_bind());
+        stream.send(bind_iq);
+
+        stream.read();
+
+        let presence_packet = Packet::Stanza(
+            Element::builder("presence", "jabber:client")
+                .append(Element::bare("show", ""))
+                .build(),
+        );
+
+        stream.send(presence_packet);
+        stream.read();
+
+        self.stream = Some(stream);
+
+        // // End stream
+        // let end_stream = crate::packet::PacketExporter::export(Packet::End).unwrap();
+        // writer.write(end_stream.as_bytes()).unwrap();
+        // writer.flush().unwrap();
+        // println!("[CLI] >>> {}", end_stream);
+        // let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
+        // reader.consume(received.len());
+        // println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
+    }
+
+    pub fn disconnect(&mut self) {
+        if let Some(stream) = &self.stream {
+            stream.send(Packet::End);
+
+            stream.read();
+
+            self.stream = None;
+
+            return ();
+        }
+
+        panic!("There is no stream. Did you forget to connect?");
     }
 }

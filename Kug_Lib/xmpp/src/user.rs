@@ -13,7 +13,7 @@ impl User {
     pub fn new(username: &str, password: &str) -> Self {
         Self {
             username: Jid::from_str(username).unwrap(),
-            password: String::from(password)
+            password: String::from(password),
         }
     }
 }

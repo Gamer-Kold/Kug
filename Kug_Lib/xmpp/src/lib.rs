@@ -1,3 +1,4 @@
 pub mod client;
-pub mod user;
 mod packet;
+pub mod user;
+mod xmpp_stream;
