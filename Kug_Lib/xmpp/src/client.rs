@@ -4,18 +4,25 @@ use minidom::Node;
 use sasl::client::mechanisms::Plain;
 use sasl::client::Mechanism;
 use sasl::common::{ChannelBinding, Credentials};
-// use core::slice::SlicePattern;
-use crate::packet::Packet;
+use xmpp_parsers::message::Message;
+use crate::packet::{Packet, PacketImporter};
 use base64::{engine::general_purpose, Engine as _};
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::net::TcpStream;
-use std::str;
+use std::str::{self, FromStr};
 use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
 use xmpp_parsers::Element;
 
 const PORT: i32 = 5222;
 const RESOURCE_BIND: &str = "Kug";
+
+#[derive(Debug)]
+pub enum XMPPEvent {
+    Message(Message),
+    Test(Packet),
+}
 
 pub struct Client {
     user: User,
@@ -24,7 +31,9 @@ pub struct Client {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        self.disconnect();
+        if let Some(_) = self.stream {
+            self.disconnect();
+        }
     }
 }
 
@@ -134,28 +143,31 @@ impl Client {
         stream.read();
 
         self.stream = Some(stream);
-
-        // // End stream
-        // let end_stream = crate::packet::PacketExporter::export(Packet::End).unwrap();
-        // writer.write(end_stream.as_bytes()).unwrap();
-        // writer.flush().unwrap();
-        // println!("[CLI] >>> {}", end_stream);
-        // let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        // reader.consume(received.len());
-        // println!("[SER] <<< {}", str::from_utf8(received.as_slice()).unwrap());
     }
 
     pub fn disconnect(&mut self) {
-        if let Some(stream) = &self.stream {
-            stream.send(Packet::End);
-
-            stream.read();
-
-            self.stream = None;
-
-            return ();
+        if let None = &self.stream {
+            panic!("There is no stream. Did you forget to connect?");
         }
 
-        panic!("There is no stream. Did you forget to connect?");
+        let stream = self.stream.as_ref().unwrap();
+        stream.send(Packet::End);
+
+        stream.read();
+
+        self.stream = None;
+    }
+
+    pub fn events(&mut self) -> Option<Vec<XMPPEvent>> {
+        if let None = &self.stream {
+            panic!("There is no stream. Did you forget to connect?");
+        }
+
+        let stream = self.stream.as_ref().unwrap();
+
+        let packet = PacketImporter::import(stream.read());
+
+        // Test server sends a iq, query with the namespace jabber:iq:version. So we should see the event fire once.
+        Some(vec![XMPPEvent::Test(packet.unwrap())])
     }
 }
