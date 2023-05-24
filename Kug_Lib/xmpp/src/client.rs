@@ -22,6 +22,12 @@ pub struct Client {
     stream: Option<XMPPStream>,
 }
 
+impl Drop for Client {
+    fn drop(&mut self) {
+        self.disconnect();
+    }
+}
+
 impl Client {
     pub fn new(user: User) -> Self {
         Self { user, stream: None }
