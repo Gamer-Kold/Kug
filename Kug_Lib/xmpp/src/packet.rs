@@ -74,7 +74,7 @@ impl PacketImporter {
         parser.next().unwrap(); // Skip XmlEvent::StartDocument
         let parsed_root = parser.next().unwrap();
 
-        if let XmlEvent::StartElement { name, attributes, namespace } = parsed_root {
+        if let XmlEvent::StartElement { name, attributes, .. } = parsed_root {
             let converted_attributes = PacketImporter::convert_attributes(attributes);
 
             if name.prefix.is_some() {

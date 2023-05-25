@@ -1,10 +1,13 @@
 use crate::user::User;
 use crate::xmpp_stream::XMPPStream;
+use jid::{BareJid, Jid, FullJid};
 use minidom::Node;
 use sasl::client::mechanisms::Plain;
 use sasl::client::Mechanism;
 use sasl::common::{ChannelBinding, Credentials};
+use xmpp_parsers::iq::{Iq, IqType};
 use xmpp_parsers::message::Message;
+use xmpp_parsers::version::VersionResult;
 use crate::packet::{Packet, PacketImporter};
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
@@ -133,6 +136,8 @@ impl Client {
 
         stream.read();
 
+        self.user.username = Jid::Full(FullJid::new(self.user.username.clone().node().unwrap(), self.user.username.clone().domain(), "Kug"));
+
         let presence_packet = Packet::Stanza(
             Element::builder("presence", "jabber:client")
                 .append(Element::bare("show", ""))
@@ -158,6 +163,36 @@ impl Client {
         self.stream = None;
     }
 
+    fn handle_stanza(&self, stanza: Element) {
+        if stanza.name() == "iq" {
+            let children: Vec<&Element> = stanza.children().collect();
+            let query = children[0];
+
+            match query.ns().as_str() {
+                "jabber:iq:version" => {
+                    let server_jid = BareJid::from_str(stanza.attr("from").unwrap()).unwrap();
+                    let mut resp_iq = Iq::empty_result(jid::Jid::Bare(server_jid), stanza.attr("id").unwrap());
+                    resp_iq.from = Some(self.user.username.clone());
+                    
+                    // TODO: Get version from package
+                    let version: Element = "<query xmlns='jabber:iq:version'><name>Kug</name><version>0.1.0</version></query>".parse().unwrap();
+                    
+                    resp_iq.payload = IqType::Result(Some(version));
+
+                    self.stream.as_ref().unwrap().send(Packet::Stanza(Element::from(resp_iq)));
+                },
+                "urn:xmpp:ping" => {
+                    let server_jid = BareJid::from_str(stanza.attr("from").unwrap()).unwrap();
+                    let mut resp_ping = Iq::empty_result(jid::Jid::Bare(server_jid), stanza.attr("id").unwrap());
+                    resp_ping.from = Some(self.user.username.clone());
+
+                    self.stream.as_ref().unwrap().send(Packet::Stanza(Element::from(resp_ping)));
+                }
+                _ => panic!("Unsupported iq") // TODO: Send server a error saying we don't support this iq.
+            }
+        }
+    }
+
     pub fn events(&mut self) -> Option<Vec<XMPPEvent>> {
         if let None = &self.stream {
             panic!("There is no stream. Did you forget to connect?");
@@ -165,9 +200,14 @@ impl Client {
 
         let stream = self.stream.as_ref().unwrap();
 
-        let packet = PacketImporter::import(stream.read());
+        let packet = PacketImporter::import(stream.read()).unwrap();
+
+        if let Packet::Stanza(stanza) = packet {
+            self.handle_stanza(stanza);
+        }
 
         // Test server sends a iq, query with the namespace jabber:iq:version. So we should see the event fire once.
-        Some(vec![XMPPEvent::Test(packet.unwrap())])
+        // Some(vec![XMPPEvent::Test(packet)])
+        None
     }
 }
