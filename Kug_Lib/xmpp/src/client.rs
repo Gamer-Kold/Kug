@@ -1,21 +1,18 @@
+use crate::packet::{Packet, PacketImporter};
 use crate::user::User;
 use crate::xmpp_stream::XMPPStream;
-use jid::{BareJid, Jid, FullJid};
+use base64::{engine::general_purpose, Engine as _};
+use jid::{BareJid, FullJid, Jid};
 use minidom::Node;
 use sasl::client::mechanisms::Plain;
 use sasl::client::Mechanism;
 use sasl::common::{ChannelBinding, Credentials};
-use xmpp_parsers::iq::{Iq, IqType};
-use xmpp_parsers::message::Message;
-use xmpp_parsers::version::VersionResult;
-use crate::packet::{Packet, PacketImporter};
-use base64::{engine::general_purpose, Engine as _};
-use std::collections::HashMap;
 use std::net::IpAddr;
-use std::net::TcpStream;
 use std::str::{self, FromStr};
 use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
+use xmpp_parsers::iq::{Iq, IqType};
+use xmpp_parsers::message::Message;
 use xmpp_parsers::Element;
 
 const PORT: i32 = 5222;
@@ -59,9 +56,10 @@ impl Client {
         }
     }
 
-    fn generate_resource_bind(&self) -> Element {
+    fn generate_resource_bind(&self, id: &String) -> Element {
+        // TODO: The ID should be completely random on login and stored for future use.
         let resource = Element::builder("resource", "")
-            .append(RESOURCE_BIND)
+            .append(format!("{}.{}", RESOURCE_BIND, id))
             .build();
 
         let bind = Element::builder("bind", "urn:ietf:params:xml:ns:xmpp-bind")
@@ -83,14 +81,10 @@ impl Client {
     pub fn connect(&mut self) {
         let host_addr = self.get_host_ip();
         println!("host ip is {}", host_addr);
-        let tcp_stream = TcpStream::connect(format!("{}:{}", host_addr, PORT)).unwrap();
-        let stream = XMPPStream::new(tcp_stream, self.user.clone());
+        // let tcp_stream = TcpStream::connect().unwrap();
+        let mut stream = XMPPStream::new(format!("{}:{}", host_addr, PORT), self.user.clone());
 
         stream.start_stream();
-
-        // TODO: Read features and apply any that is required or should be enabled (example: starttls)
-        // Test server doesn't require any features, so let's just move on. Just need something working locally.
-        stream.read();
 
         let credentials = Credentials::default()
             .with_username(self.user.username.clone().node().unwrap())
@@ -126,17 +120,17 @@ impl Client {
 
         stream.read();
 
-        // Start a new stream after we authenticate (RFC shows this in an example)
-        // It should send a stream header, and features as a child in one stanza.
-
-        stream.start_stream();
-
-        let bind_iq = Packet::Stanza(self.generate_resource_bind());
+        let id = stream.header_attrs.get("id").unwrap();
+        let bind_iq = Packet::Stanza(self.generate_resource_bind(id));
         stream.send(bind_iq);
 
         stream.read();
 
-        self.user.username = Jid::Full(FullJid::new(self.user.username.clone().node().unwrap(), self.user.username.clone().domain(), "Kug"));
+        self.user.username = Jid::Full(FullJid::new(
+            self.user.username.clone().node().unwrap(),
+            self.user.username.clone().domain(),
+            "Kug",
+        ));
 
         let presence_packet = Packet::Stanza(
             Element::builder("presence", "jabber:client")
@@ -155,7 +149,7 @@ impl Client {
             panic!("There is no stream. Did you forget to connect?");
         }
 
-        let stream = self.stream.as_ref().unwrap();
+        let stream = self.stream.as_mut().unwrap();
         stream.send(Packet::End);
 
         stream.read();
@@ -163,7 +157,7 @@ impl Client {
         self.stream = None;
     }
 
-    fn handle_stanza(&self, stanza: Element) {
+    fn handle_stanza(&mut self, stanza: Element) {
         if stanza.name() == "iq" {
             let children: Vec<&Element> = stanza.children().collect();
             let query = children[0];
@@ -171,24 +165,32 @@ impl Client {
             match query.ns().as_str() {
                 "jabber:iq:version" => {
                     let server_jid = BareJid::from_str(stanza.attr("from").unwrap()).unwrap();
-                    let mut resp_iq = Iq::empty_result(jid::Jid::Bare(server_jid), stanza.attr("id").unwrap());
+                    let mut resp_iq =
+                        Iq::empty_result(jid::Jid::Bare(server_jid), stanza.attr("id").unwrap());
                     resp_iq.from = Some(self.user.username.clone());
-                    
+
                     // TODO: Get version from package
                     let version: Element = "<query xmlns='jabber:iq:version'><name>Kug</name><version>0.1.0</version></query>".parse().unwrap();
-                    
+
                     resp_iq.payload = IqType::Result(Some(version));
 
-                    self.stream.as_ref().unwrap().send(Packet::Stanza(Element::from(resp_iq)));
-                },
+                    self.stream
+                        .as_mut()
+                        .unwrap()
+                        .send(Packet::Stanza(Element::from(resp_iq)));
+                }
                 "urn:xmpp:ping" => {
                     let server_jid = BareJid::from_str(stanza.attr("from").unwrap()).unwrap();
-                    let mut resp_ping = Iq::empty_result(jid::Jid::Bare(server_jid), stanza.attr("id").unwrap());
+                    let mut resp_ping =
+                        Iq::empty_result(jid::Jid::Bare(server_jid), stanza.attr("id").unwrap());
                     resp_ping.from = Some(self.user.username.clone());
 
-                    self.stream.as_ref().unwrap().send(Packet::Stanza(Element::from(resp_ping)));
+                    self.stream
+                        .as_mut()
+                        .unwrap()
+                        .send(Packet::Stanza(Element::from(resp_ping)));
                 }
-                _ => panic!("Unsupported iq") // TODO: Send server a error saying we don't support this iq.
+                _ => panic!("Unsupported iq"), // TODO: Send server a error saying we don't support this iq.
             }
         }
     }
@@ -198,7 +200,7 @@ impl Client {
             panic!("There is no stream. Did you forget to connect?");
         }
 
-        let stream = self.stream.as_ref().unwrap();
+        let stream = self.stream.as_mut().unwrap();
 
         let packet = PacketImporter::import(stream.read()).unwrap();
 

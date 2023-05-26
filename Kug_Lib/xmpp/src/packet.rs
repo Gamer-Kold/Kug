@@ -1,7 +1,10 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 use std::str;
-use xml::{reader::{EventReader, XmlEvent}, name::OwnedName, attribute::OwnedAttribute};
-use xmpp_parsers::{Element, iq::Iq, message::Message, presence::Presence};
+use xml::{
+    attribute::OwnedAttribute,
+    reader::{EventReader, XmlEvent},
+};
+use xmpp_parsers::Element;
 
 type PacketExportResult = Result<String, PacketError>;
 type PacketImportResult = Result<Packet, PacketError>;
@@ -68,24 +71,41 @@ impl PacketImporter {
 
         converted_attributes
     }
-    
+
     pub fn import(content: String) -> PacketImportResult {
-        let mut parser = EventReader::new(content.as_bytes());
+        // TODO: There HAS to be a better way to do this. XML parser does not like that there is no namespace definition for :features.
+        let new_content = content.replace(
+            "<stream:features>",
+            "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>",
+        );
+        let mut parser = EventReader::new(new_content.as_bytes());
         parser.next().unwrap(); // Skip XmlEvent::StartDocument
         let parsed_root = parser.next().unwrap();
 
-        if let XmlEvent::StartElement { name, attributes, .. } = parsed_root {
+        if let XmlEvent::StartElement {
+            name, attributes, ..
+        } = parsed_root
+        {
             let converted_attributes = PacketImporter::convert_attributes(attributes);
 
             if name.prefix.is_some() {
-                // This element is a stream:stream (No other elements we will parse have a prefix)
-                return Ok(Packet::Start(converted_attributes));
+                match name.local_name.as_str() {
+                    "stream" => return Ok(Packet::Start(converted_attributes)),
+                    "features" => return Ok(Packet::Stanza(new_content.parse().unwrap())),
+                    _ => panic!("Unknown content with prefix"),
+                }
             }
 
             match name.local_name.as_str() {
                 "presence" => todo!("presence"),
                 "message" => todo!("message"),
-                "iq" => Ok(Packet::Stanza(Element::from_reader_with_prefixes(content.as_bytes(), String::from("jabber:client")).unwrap())),
+                "iq" => Ok(Packet::Stanza(
+                    Element::from_reader_with_prefixes(
+                        content.as_bytes(),
+                        String::from("jabber:client"),
+                    )
+                    .unwrap(),
+                )),
                 _ => todo!(),
             }
         } else {
